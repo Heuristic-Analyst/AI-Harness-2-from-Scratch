@@ -9,8 +9,8 @@ class Agent:
             self.conversation = conversation
 
     def ask(self, text):
+        """send a message, get the answer back as text. the model only knows what is in `messages`"""
         self.conversation.append({"role": "user", "content": text})
-        """send one message, get the answer back as text. the model only knows what is in `messages`"""
         response = litellm.completion(
             model=self.model,
             api_key=self.api_key,
