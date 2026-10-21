@@ -17,26 +17,25 @@ class Agent:
         self.print_thinking = print_thinking   # True = the thinking is printed too. False = only the answer
         self.printing = None                   # what kind of text was printed last: "THINKING", "ANSWER" or None
         self.conversation = conversation or []
-        if instructions:
-            self.refresh_system()                  # the system prompt goes in as the very first message
+        self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
-    # --- the system prompt: always built fresh from its parts, never edited in place ---
     def build_system(self):
-        """put the system prompt together from its parts and return it as text. it only builds, it changes
-        nothing: refresh_system puts it into the conversation. the same parts always give exactly the same
-        text, so the provider's cache of the conversation stays valid"""
-        system = self.instructions             # 1. who the agent is
-                                               # more parts are added here later (memory, skills, mode, ...),
-                                               # always in the same order
+        system = self.instructions or ""  # 1. who the agent is. none given: start with an empty text
         return system
 
     def refresh_system(self):
-        """build the system prompt, and put it in as the first message of the conversation: replace the old one
-        if there is one, otherwise add it at the very front"""
-        system = {"role": "system", "content": self.build_system()}
-        if self.conversation and self.conversation[0]["role"] == "system":   # there is one already: replace it
+        """build the system prompt, and put it in as the first message. an empty prompt means no system
+        message at all: an old one is removed"""
+        text = self.build_system()
+        has_one = bool(self.conversation) and self.conversation[0]["role"] == "system"
+        if not text:  # nothing to say: no system message at all
+            if has_one:
+                self.conversation.pop(0)  # an old one is removed, so it can't stay outdated
+            return
+        system = {"role": "system", "content": text}
+        if has_one:
             self.conversation[0] = system
-        else:                                                                # none yet: put it in front
+        else:
             self.conversation.insert(0, system)
 
     def ask(self, text):
