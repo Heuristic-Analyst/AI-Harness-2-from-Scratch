@@ -4,8 +4,9 @@ from config import *
 from classes.agent import Agent
 
 if __name__ == "__main__":                           # runs only when you start main.py directly
-    agent = Agent(MODEL, API_KEY)
+    agent = Agent(MODEL, API_KEY, stream=STREAM)          # by name: can never land in the wrong parameter
     try:
-        print(agent.ask(input("> ")))
-    except Exception as e:  # the model or the connection failed: say what happened
-        print("error: " + type(e).__name__ + ": " + str(e))
+        agent.ask(input("> "))                     # ask prints the answer itself now
+    except Exception as e:  # the model or the connection failed: say what happened.
+                            # \n first: a stream may have stopped in the middle of a line
+        print("\nerror: " + type(e).__name__ + ": " + str(e))
