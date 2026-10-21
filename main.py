@@ -4,10 +4,12 @@
 from config import *
 from classes.agent import Agent
 from functions.commands import check_input
+from functions.read_text import read_text
 
 if __name__ == "__main__":                           # runs only when you start main.py directly
-    agent = Agent(MODEL, API_KEY, stream=STREAM, effort=EFFORT,       # by name: can never land
-                  print_thinking=PRINT_THINKING)                  # in the wrong parameter
+    soul = read_text(SOUL_FILE) or "You are a helpful assistant."   # missing or empty file: a short fallback
+    agent = Agent(MODEL, API_KEY, instructions=soul, stream=STREAM,     # by name: can never land
+                  effort=EFFORT, print_thinking=PRINT_THINKING)       # in the wrong parameter
     print("model: " + MODEL + "   (/exit to leave)")
 
     try:
