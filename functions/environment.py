@@ -7,5 +7,5 @@ def read_key(provider, file_path):
     with open(file_path, encoding="utf-8") as f:          # "with" closes the file again when we're done
         for line in f:
             if line.startswith(provider + "_API_KEY="):
-                return line.split("=", 1)[1].strip(" '\"")   # everything after the first "=", without quotes
+                return line.split("=", 1)[1].strip().strip("'\"")   # everything after the first "=", without quotes
     return None
