@@ -5,7 +5,7 @@ from functions.environment import read_key
 # Paths
 HERE = os.path.dirname(os.path.abspath(__file__))   # the folder this file lives in. .env is found from here
 ENV_FILE = os.path.join(HERE, ".env")
-MODEL_FILE = os.path.join(HERE, "config", "model.json")
+MODEL_FILE = os.path.join(HERE, "settings", "model.json")
 
 # Model name
 MODEL = read_json(MODEL_FILE)["Model"]
