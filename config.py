@@ -7,8 +7,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))   # the folder this file lives
 ENV_FILE = os.path.join(HERE, ".env")
 MODEL_FILE = os.path.join(HERE, "settings", "model.json")
 
-# Model name
-MODEL = read_json(MODEL_FILE)["Model"]
+# Model settings: read the file once, then take what we need from it
+MODEL_SETTINGS = read_json(MODEL_FILE)
+MODEL = MODEL_SETTINGS["Model"]                        # required: without a model nothing works
+STREAM = MODEL_SETTINGS.get("Stream", False)           # optional: True = print the answer piece by piece as it arrives
 
 # Provider name
 provider = MODEL.split("/")[0].upper()               # "deepseek/deepseek-flash" -> "DEEPSEEK"
