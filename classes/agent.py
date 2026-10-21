@@ -1,4 +1,6 @@
+import json
 import time
+import threading
 import litellm
 
 litellm.drop_params = True     # a model that can't do something we ask for (e.g. thinking): leave it out, don't crash
@@ -8,10 +10,12 @@ RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
             litellm.InternalServerError, litellm.ServiceUnavailableError)
 
 class Agent:
-    def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False, conversation=None):
+    def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False,
+                 tools=None, conversation=None):
         self.model = model
         self.api_key = api_key
         self.instructions = instructions       # who the agent is (the soul): the first part of its system prompt
+        self.tools = tools or {}               # the tools it may use: name -> {"schema", "run"} (functions/load_tools.py)
         self.stream = stream                   # True = the answer is printed piece by piece while it arrives
         self.effort = effort                   # how hard the model thinks: "low", "medium", "high". None = its default
         self.print_thinking = print_thinking   # True = the thinking is printed too. False = only the answer
@@ -41,21 +45,62 @@ class Agent:
             self.conversation.insert(0, system)
 
     def ask(self, text):
-        """send a message, print the answer while it arrives, and return it as text.
-        the model only knows what is in `conversation`"""
+        """send a message, and loop until the model answers without asking for a tool:
+        model -> it asks for tools -> run them -> their results go back to the model -> model -> ...
+        prints everything while it happens, and returns the final answer as text"""
         question = {"role": "user", "content": text}
         self.conversation.append(question)
         try:
-            response = self.call_model()
-            response = self.show(response)     # inside the try: when streaming, the connection can also fail
-                                               # here, in the middle of the answer. afterwards: the finished response
+            while True:                            # one round = one model call (+ the tools it asked for)
+                response = self.call_model()
+                response = self.show(response)     # inside the try: when streaming, the connection can also fail
+                                                   # here, in the middle of the answer. afterwards: the finished response
+                message = response.choices[0].message   # the answer: text, thinking, tool calls
+                self.conversation.append(message.model_dump(exclude_none=True))   # the WHOLE message as a dict
+                self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
+                if not message.tool_calls:         # CHECK: does the model want a tool?
+                    return message.content or ""   #   no: that was the final answer. done
+                self.run_tools(message.tool_calls) #   yes: run them, put the results in, and loop: ask the model again
         except Exception:
-            self.conversation.pop()            # it failed: take the question back, so the list is as before
-            raise                              # and let the caller know. main.py prints it
-        message = response.choices[0].message  # the answer: text, thinking, and later tool calls
-        self.conversation.append(message.model_dump(exclude_none=True))   # the WHOLE message as a dict
-        self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
-        return message.content or ""           # None if the model wrote no text: then an empty answer
+            if self.conversation[-1] is question:  # it failed before anything happened: take the question back,
+                self.conversation.pop()            # so the list is as before. (if tools already ran, their work stays)
+            raise                                  # and let the caller know. main.py prints it
+
+    # --- tools: every tool call of one answer runs in its own thread, all at the same time ---
+    def run_tools(self, tool_calls):
+        """run all tool calls of one answer at the same time, wait until every one is done, then put the results
+        into the conversation, in the order the model asked for them. each result carries the id of its call:
+        that id is the only way the model knows which result belongs to which call"""
+        results = {}                               # call id -> its result. every thread writes into this one dict
+        threads = []
+        for call in tool_calls:                    # 1. start one thread per call. they all run at once
+            print("\nTOOL CALL: " + call.function.name + "(" + (call.function.arguments or "") + ")")
+            thread = threading.Thread(target=self.run_tool, args=(call, results), daemon=True)
+            thread.start()                         #    daemon: a running tool can't keep the program from ending
+            threads.append(thread)
+        for thread in threads:                     # 2. wait until EVERY one is done. they finish in any order,
+            thread.join()                          #    that's why they write into a dict by id, not into a list
+        for call in tool_calls:                    # 3. in the order the model ASKED, not the order they finished
+            result = results.get(call.id, "error: the tool gave no result")   # never missing: see run_tool
+            print("TOOL RESULT: " + call.function.name + " -> " + result)
+            self.conversation.append({"role": "tool",
+                                      "tool_call_id": call.id,   # which call this answers: must match exactly
+                                      "name": call.function.name,
+                                      "content": result})
+
+    def run_tool(self, call, results):
+        """run ONE tool call (in its own thread) and put its result into results[call.id]. it never fails:
+        every problem becomes an error text for the model, so every call always gets an answer. (a call without
+        an answer breaks the whole conversation: the provider rejects every request after it)"""
+        name = call.function.name
+        try:
+            if name not in self.tools:             # the model asked for a tool it doesn't have
+                raise Exception("there is no tool called '" + str(name) + "'. yours: " + (", ".join(self.tools) or "none"))
+            args = json.loads(call.function.arguments or "{}")   # the arguments arrive as json TEXT: make a dict
+            result = str(self.tools[name]["run"](self, **args))  # run(agent, expression=...). always text
+        except Exception as e:                     # wrong arguments, broken json, the tool crashed: tell the model,
+            result = "error: " + type(e).__name__ + ": " + str(e)   # so it can try again
+        results[call.id] = result
 
     def count_tokens(self, response):
         """how big the conversation is now, in tokens: everything that was sent + what the model wrote back,
@@ -77,6 +122,8 @@ class Agent:
                 return litellm.completion(model=self.model,
                                           api_key=self.api_key,
                                           messages=self.conversation,
+                                          tools=[t["schema"] for t in self.tools.values()] or None,
+                                                   # what the model may ask for. no tools: None
                                           stream=self.stream,
                                           stream_options={"include_usage": True} if self.stream else None,
                                                    # streaming: also send the token count, in one last chunk.
