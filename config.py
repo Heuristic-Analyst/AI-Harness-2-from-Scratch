@@ -6,6 +6,7 @@ from functions.environment import read_key
 HERE = os.path.dirname(os.path.abspath(__file__))   # the folder this file lives in. .env is found from here
 ENV_FILE = os.path.join(HERE, ".env")
 MODEL_FILE = os.path.join(HERE, "settings", "model.json")
+SOUL_FILE = os.path.join(HERE, "Ego", "SOUL.md")     # who the agent is: the start of its system prompt. you write it
 
 # Model settings: read the file once, then take what we need from it
 MODEL_SETTINGS = read_json(MODEL_FILE)
