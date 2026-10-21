@@ -4,7 +4,6 @@
 #          DEEPSEEK_API_KEY=sk-...
 
 import os
-import litellm
 from functions.model import read_model
 from functions.environment import read_key
 from classes.agent import Agent
