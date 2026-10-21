@@ -4,6 +4,7 @@
 COMMANDS = {                                         # every command, with what it does. the help list is made from
     "/exit": "leave the program",                    # this, so a new command only needs one new line here
     "/quit": "leave the program (the same as /exit)",
+    "/help": "show this list",
 }
 
 
@@ -28,6 +29,9 @@ def check_input(text):
     command = text.split()[0]                        # the first word: "/exit now" -> "/exit"
     if command in ("/exit", "/quit"):
         return "exit"
+    if command == "/help":
+        print(help_text())
+        return "skip"                                # handled: nothing more to do
 
     print("command not found: " + command)           # starts with "/", but we don't know it
     print(help_text())
