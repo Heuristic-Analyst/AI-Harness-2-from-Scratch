@@ -8,16 +8,36 @@ RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
             litellm.InternalServerError, litellm.ServiceUnavailableError)
 
 class Agent:
-    def __init__(self, model, api_key, stream=False, effort=None, print_thinking=False, conversation=None):
+    def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False, conversation=None):
         self.model = model
         self.api_key = api_key
+        self.instructions = instructions       # who the agent is (the soul): the first part of its system prompt
         self.stream = stream                   # True = the answer is printed piece by piece while it arrives
         self.effort = effort                   # how hard the model thinks: "low", "medium", "high". None = its default
         self.print_thinking = print_thinking   # True = the thinking is printed too. False = only the answer
         self.printing = None                   # what kind of text was printed last: "THINKING", "ANSWER" or None
-        self.conversation = []
-        if conversation:
-            self.conversation = conversation
+        self.conversation = conversation or []
+        if instructions:
+            self.refresh_system()                  # the system prompt goes in as the very first message
+
+    # --- the system prompt: always built fresh from its parts, never edited in place ---
+    def build_system(self):
+        """put the system prompt together from its parts and return it as text. it only builds, it changes
+        nothing: refresh_system puts it into the conversation. the same parts always give exactly the same
+        text, so the provider's cache of the conversation stays valid"""
+        system = self.instructions             # 1. who the agent is
+                                               # more parts are added here later (memory, skills, mode, ...),
+                                               # always in the same order
+        return system
+
+    def refresh_system(self):
+        """build the system prompt, and put it in as the first message of the conversation: replace the old one
+        if there is one, otherwise add it at the very front"""
+        system = {"role": "system", "content": self.build_system()}
+        if self.conversation and self.conversation[0]["role"] == "system":   # there is one already: replace it
+            self.conversation[0] = system
+        else:                                                                # none yet: put it in front
+            self.conversation.insert(0, system)
 
     def ask(self, text):
         """send a message, print the answer while it arrives, and return it as text.
