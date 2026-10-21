@@ -4,7 +4,7 @@
 #          DEEPSEEK_API_KEY=sk-...
 
 import os
-from functions.model import read_model
+from functions.read_json import read_json
 from functions.environment import read_key
 from classes.agent import Agent
 
@@ -14,7 +14,7 @@ ENV_FILE = os.path.join(HERE, ".env")
 MODEL_FILE = os.path.join(HERE, "config", "model.json")
 
 # Model name
-MODEL = read_model(MODEL_FILE)["Model"]
+MODEL = read_json(MODEL_FILE)["Model"]
 
 # Provider name
 provider = MODEL.split("/")[0].upper()               # "deepseek/deepseek-flash" -> "DEEPSEEK"
