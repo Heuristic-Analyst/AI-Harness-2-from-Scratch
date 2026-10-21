@@ -1,0 +1,5 @@
+# your API keys and your chats: never on GitHub
+.env
+
+# python's cache files
+__pycache__/
