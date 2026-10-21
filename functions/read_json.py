@@ -1,9 +1,8 @@
 import os
 import json
 def read_json(file_path):
-    """the line PROVIDER_API_KEY=... from .env, for the provider in MODEL. None if there is none
-    (fine for local models like ollama). the key never goes into the environment"""
-    if not os.path.isfile(file_path):                     # no .env at all: no key, no crash
+    """the json file at file_path, as python data (dict, list, ...). missing or broken: a clear error"""
+    if not os.path.isfile(file_path):                     # a file we need: say so plainly
         raise FileNotFoundError(file_path + " is missing")
     with open(file_path, encoding="utf-8") as f:
         try:
