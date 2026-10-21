@@ -16,5 +16,6 @@ class Agent:
             api_key=self.api_key,
             messages=self.conversation,
         )
-        self.conversation.append(response.choices[0].message.content)
-        return response.choices[0].message.content
+        answer = response.choices[0].message.content
+        self.conversation.append({"role": "assistant", "content": answer})
+        return answer
