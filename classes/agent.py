@@ -48,6 +48,7 @@ class Agent:
                                           messages=self.conversation,
                                           stream=self.stream,
                                           reasoning_effort=self.effort,
+                                          cache_control_injection_points=[{"location": "message", "index": -1}],
                                           timeout=120)
             except RETRY_ON as e:
                 if attempt == RETRIES:         # the last try failed too: give up
