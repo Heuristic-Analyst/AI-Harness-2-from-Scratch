@@ -11,6 +11,9 @@ MODEL_FILE = os.path.join(HERE, "settings", "model.json")
 MODEL_SETTINGS = read_json(MODEL_FILE)
 MODEL = MODEL_SETTINGS["Model"]                        # required: without a model nothing works
 STREAM = MODEL_SETTINGS.get("Stream", False)           # optional: True = print the answer piece by piece as it arrives
+EFFORT = MODEL_SETTINGS.get("Effort")                  # optional: how hard the model thinks ("low", "medium", "high").
+                                                       # None = the model's own default
+PRINT_THINKING = MODEL_SETTINGS.get("PrintThinking", False)   # optional: True = show the thinking too, not only the answer
 
 # Provider name
 provider = MODEL.split("/")[0].upper()               # "deepseek/deepseek-flash" -> "DEEPSEEK"
