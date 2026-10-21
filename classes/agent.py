@@ -16,6 +16,8 @@ class Agent:
         self.effort = effort                   # how hard the model thinks: "low", "medium", "high". None = its default
         self.print_thinking = print_thinking   # True = the thinking is printed too. False = only the answer
         self.printing = None                   # what kind of text was printed last: "THINKING", "ANSWER" or None
+        self.tokens = 0                        # how big the conversation is, in tokens, as of the last answer.
+                                               # 0 = no answer yet. the next call sends this + the new message
         self.conversation = conversation or []
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
@@ -45,14 +47,24 @@ class Agent:
         self.conversation.append(question)
         try:
             response = self.call_model()
-            message = self.show(response)      # inside the try: when streaming, the connection can also fail
-                                               # here, in the middle of the answer
+            response = self.show(response)     # inside the try: when streaming, the connection can also fail
+                                               # here, in the middle of the answer. afterwards: the finished response
         except Exception:
             self.conversation.pop()            # it failed: take the question back, so the list is as before
             raise                              # and let the caller know. main.py prints it
-        self.conversation.append(message.model_dump(exclude_none=True))   # the WHOLE message as a dict: answer,
-                                                                          # thinking, and later tool calls
+        message = response.choices[0].message  # the answer: text, thinking, and later tool calls
+        self.conversation.append(message.model_dump(exclude_none=True))   # the WHOLE message as a dict
+        self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
         return message.content or ""           # None if the model wrote no text: then an empty answer
+
+    def count_tokens(self, response):
+        """how big the conversation is now, in tokens: everything that was sent + what the model wrote back,
+        as the provider counted it (response.usage). exact, and free: it comes with every answer.
+        no count from the provider (some local models): litellm estimates it from the conversation instead"""
+        usage = getattr(response, "usage", None)            # None if the response has no usage at all
+        if usage and usage.total_tokens:                     # total = prompt_tokens (sent) + completion_tokens (written)
+            return usage.total_tokens
+        return litellm.token_counter(model=self.model, messages=self.conversation)   # an estimate, good enough
 
     def call_model(self):
         """one model call. errors that may go away by themselves (busy, network) are tried again, waiting
@@ -66,6 +78,9 @@ class Agent:
                                           api_key=self.api_key,
                                           messages=self.conversation,
                                           stream=self.stream,
+                                          stream_options={"include_usage": True} if self.stream else None,
+                                                   # streaming: also send the token count, in one last chunk.
+                                                   # (without streaming it always comes, and this must be None)
                                           reasoning_effort=self.effort,
                                           cache_control_injection_points=[{"location": "message", "index": -1}],
                                           timeout=120)
@@ -77,10 +92,11 @@ class Agent:
                 wait *= 2
 
     def show(self, response):
-        """print the model's thinking and answer, and return the finished message.
+        """print the model's thinking and answer, and return the finished response (the answer is in
+        .choices[0].message, the token count in .usage).
         not streaming: the whole answer arrives at once, in one response, and is printed at once.
         streaming: the response is a stream of small pieces (chunks). each is printed the moment it arrives,
-        then all of them are glued back together into one finished message, the same as without streaming"""
+        then all of them are glued back together into one finished response, the same as without streaming"""
         self.printing = None                               # a new answer: nothing printed for it yet
 
         if not self.stream:
@@ -88,18 +104,20 @@ class Agent:
             self.print_part("THINKING", getattr(message, "reasoning_content", None))   # None if it didn't think
             self.print_part("ANSWER", message.content)
             print()                                        # end the last line
-            return message
+            return response
 
         chunks = []                                        # every chunk, to glue the full message together at the end
         for chunk in response:                             # waits for each next chunk while the model writes
             chunks.append(chunk)
-            if not chunk.choices:                          # some chunks are only bookkeeping (e.g. token usage)
-                continue
+            if not chunk.choices:                          # some chunks are only bookkeeping, e.g. the last one
+                continue                                   # with the token count. kept in chunks, nothing to print
             delta = chunk.choices[0].delta                 # delta = only what is new in this chunk
             self.print_part("THINKING", getattr(delta, "reasoning_content", None))   # a piece of thinking, or None
             self.print_part("ANSWER", delta.content)       # a piece of the answer, or None
         print()                                            # the answer is complete: end its line
-        return litellm.stream_chunk_builder(chunks).choices[0].message   # litellm glues the chunks into one reply
+        return litellm.stream_chunk_builder(chunks, messages=self.conversation)   # litellm glues the chunks into
+                                                           # one response. messages: if no chunk had a token count,
+                                                           # litellm counts the conversation itself
 
     def print_part(self, kind, text):
         """print one piece of THINKING or ANSWER text. a title appears whenever the kind changes"""
