@@ -2,8 +2,11 @@ import json
 import time
 import threading
 import litellm
+import logging
 
 litellm.drop_params = True     # a model that can't do something we ask for (e.g. thinking): leave it out, don't crash
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)   # litellm is chatty: only show real errors, no warnings
+litellm.suppress_debug_info = True                     # no "Provider List: ..." lines from litellm's bookkeeping
 
 RETRIES = 3                    # tries after the first one, only for errors that may go away by themselves
 RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
