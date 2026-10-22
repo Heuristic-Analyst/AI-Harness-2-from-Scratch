@@ -3,11 +3,11 @@ from functions.read_front_matter import read_front_matter
 
 
 def load_skills(folder):
-    """find every skill: a folder in `folder` with a SKILL.md inside (Skills/<name>/SKILL.md). returns a dict:
+    """find every skill: a folder in `folder` with a SKILL.md inside (skills/<name>/SKILL.md). returns a dict:
         skill name -> {"description": the one line for the menu, "path": its SKILL.md}
     only the header is kept: the instructions themselves are read when the model loads the skill (load_skill)"""
     skills = {}
-    if not os.path.isdir(folder):                            # no Skills folder at all: no skills, no crash
+    if not os.path.isdir(folder):                            # no skills folder at all: no skills, no crash
         return skills
     for entry in sorted(os.listdir(folder)):                 # one subfolder per skill
         path = os.path.join(folder, entry, "SKILL.md")
