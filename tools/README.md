@@ -5,7 +5,7 @@ Everything the agent can *do* is a tool, and every tool is one Python file in he
 | Tool | File | What it does |
 |---|---|---|
 | `calculate` | `basic/calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
-| `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`Skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
+| `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
 
 ## How a tool file looks
 
