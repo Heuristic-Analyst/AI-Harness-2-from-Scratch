@@ -11,7 +11,7 @@ from functions.load_skills import load_skills
 if __name__ == "__main__":                           # runs only when you start main.py directly
     soul = read_text(SOUL_FILE) or "You are a helpful assistant."   # missing or empty file: a short fallback
     tools = load_tools(TOOLS_DIR)                    # every tool in tools/: name -> its schema and its function
-    skills = load_skills(SKILLS_DIR)                 # every skill in Skills/: name -> its description and its file
+    skills = load_skills(SKILLS_DIR)                 # every skill in skills/: name -> its description and its file
     if not skills:                                   # no skills: load_skill could do nothing, so the model
         tools.pop("load_skill", None)                # doesn't get it. (None: no error if it isn't there either)
     agent = Agent(MODEL, API_KEY, instructions=soul, stream=STREAM,     # by name: can never land
