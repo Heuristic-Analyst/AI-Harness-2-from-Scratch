@@ -9,6 +9,8 @@ MODEL_FILE = os.path.join(HERE, "settings", "model.json")
 SOUL_FILE = os.path.join(HERE, "Ego", "SOUL.md")     # who the agent is: the start of its system prompt. you write it
 TOOLS_DIR = os.path.join(HERE, "tools")              # tools/<name>.py = one tool each (see functions/load_tools.py)
 SKILLS_DIR = os.path.join(HERE, "skills")            # skills/<name>/SKILL.md = one skill each (see functions/load_skills.py)
+CONVERSATIONS_DIR = os.path.join(HERE, "Conversations")   # Conversations/<name>/state.json = one conversation each
+                                                          # (see functions/conversations.py). created with the first one
 
 # Model settings: read the file once, then take what we need from it
 MODEL_SETTINGS = read_json(MODEL_FILE)
