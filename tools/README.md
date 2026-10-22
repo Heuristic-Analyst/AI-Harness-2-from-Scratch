@@ -4,7 +4,8 @@ Everything the agent can *do* is a tool, and every tool is one Python file in he
 
 | Tool | File | What it does |
 |---|---|---|
-| `calculate` | `calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
+| `calculate` | `basic/calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
+| `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`Skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
 
 ## How a tool file looks
 
@@ -65,7 +66,7 @@ That's all. There is no list to add it to and no import to write: `functions/loa
 - **Files and folders starting with `_` are skipped**: `_helpers.py`, `_drafts/`. That's where shared helper code goes. A tool uses a helper next to it with `from . import _helpers`.
 - **Anything that isn't a `.py` file is ignored**, like this README.
 - **Two tools with the same `name` stop the program** at start, naming both files:
-  `two tools are called 'calculate': tools/calculate.py and tools/math/calc2.py. rename one`
+  `two tools are called 'calculate': tools/basic/calculate.py and tools/math/calc2.py. rename one`
 - **A `.py` file without `TOOL` or `run` stops the program** too, so a half-written tool is noticed right away.
 
 ## What happens when the model calls a tool
