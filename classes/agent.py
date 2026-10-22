@@ -11,11 +11,13 @@ RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
 
 class Agent:
     def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False,
-                 tools=None, conversation=None):
+                 tools=None, skills=None, conversation=None):
         self.model = model
         self.api_key = api_key
         self.instructions = instructions       # who the agent is (the soul): the first part of its system prompt
         self.tools = tools or {}               # the tools it may use: name -> {"schema", "run"} (functions/load_tools.py)
+        self.skills = skills or {}             # the skills it may load: name -> {"description", "path"}
+                                               # (functions/load_skills.py). the menu goes into the system prompt
         self.stream = stream                   # True = the answer is printed piece by piece while it arrives
         self.effort = effort                   # how hard the model thinks: "low", "medium", "high". None = its default
         self.print_thinking = print_thinking   # True = the thinking is printed too. False = only the answer
@@ -26,8 +28,16 @@ class Agent:
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
     def build_system(self):
+        """put the system prompt together from its parts, always in the same order, and return it as text.
+        the same parts always give exactly the same text, so the provider's cache stays valid"""
         system = self.instructions or ""  # 1. who the agent is. none given: start with an empty text
-        return system
+        if self.skills:                   # 2. the skills menu: only name + one line each. the instructions
+                                          #    themselves are loaded on demand, with the load_skill tool
+            system += ("\n\nYou have skills: step-by-step instructions for certain kinds of tasks. When a task "
+                       "matches a skill, first call load_skill with its name, then follow what it returns.\nSkills:")
+            for name, skill in self.skills.items():
+                system += "\n- " + name + ": " + skill["description"]
+        return system.strip()             # strip: no skills and no soul -> "" -> no system message at all
 
     def refresh_system(self):
         """build the system prompt, and put it in as the first message. an empty prompt means no system
