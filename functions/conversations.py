@@ -1,5 +1,8 @@
 # conversations.py — the conversations on disk. each one is a folder in Conversations/, named after it:
-#   Conversations/20261022-21-40-05/state.json     everything said so far: what /open loads again
+#   Conversations/20261022-21-40-05/state.json     what the agent carries right now: what /open loads again.
+#                                                  replaced after every message
+#   Conversations/20261022-21-40-05/log.jsonl      everything that ever happened, one line each. only ever added to,
+#                                                  never read by the program: it is for you (the agent writes it)
 # a new conversation is only written once something was said in it, so there are no empty folders.
 
 import os
@@ -19,6 +22,9 @@ def folder_of(name):
 
 def state_of(name):
     return os.path.join(CONVERSATIONS_DIR, name, "state.json")
+
+def log_of(name):
+    return os.path.join(CONVERSATIONS_DIR, name, "log.jsonl")
 
 def exists(name):
     return os.path.isdir(folder_of(name))
@@ -44,11 +50,13 @@ def name_problem(name):
 
 
 def names():
-    """every saved conversation: the folders in Conversations/ that have a state.json, oldest first
-    (the names start with the time they were made, so sorting them sorts them by time)"""
+    """every saved conversation: the folders in Conversations/ that have a state.json or a log, oldest first
+    (the names start with the time they were made, so sorting them sorts them by time). a log without a state.json:
+    a conversation whose only message failed. it has nothing to go on with yet, but it exists"""
     if not os.path.isdir(CONVERSATIONS_DIR):            # nothing saved yet: no folder yet
         return []
-    return [name for name in sorted(os.listdir(CONVERSATIONS_DIR)) if os.path.isfile(state_of(name))]
+    return [name for name in sorted(os.listdir(CONVERSATIONS_DIR))
+            if os.path.isfile(state_of(name)) or os.path.isfile(log_of(name))]
 
 
 def save(name, agent):
@@ -70,7 +78,9 @@ def save(name, agent):
 
 
 def load(name):
-    """the saved conversation: {"messages": [...], "tokens": n}"""
+    """the saved conversation: {"messages": [...], "tokens": n}. only a log, no state.json yet: empty"""
+    if not os.path.isfile(state_of(name)):
+        return {"messages": [], "tokens": 0}
     return read_json(state_of(name))
 
 
