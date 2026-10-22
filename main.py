@@ -1,6 +1,7 @@
 # run it:  python main.py
 # then type your messages. /help shows the commands, /exit (or ctrl+c) leaves.
-# every conversation is saved in Conversations/<name>/state.json after every message (functions/conversations.py)
+# every conversation is saved in Conversations/<name>/state.json after every message, and everything that happens
+# is written into Conversations/<name>/log.jsonl (functions/conversations.py)
 
 from config import *
 from classes.agent import Agent
@@ -11,11 +12,13 @@ from functions.load_skills import load_skills
 from functions import conversations
 
 
-def new_agent(messages=None):
-    """a fresh agent. messages: a saved conversation to go on with (it gets a new system prompt)"""
+def new_agent(name, messages=None):
+    """a fresh agent for the conversation called name: it logs into that conversation's log.jsonl.
+    messages: a saved conversation to go on with (it gets a new system prompt)"""
     return Agent(MODEL, API_KEY, instructions=soul, stream=STREAM,      # by name: can never land
                  effort=EFFORT, print_thinking=PRINT_THINKING,        # in the wrong parameter
-                 tools=tools, skills=skills, conversation=messages)
+                 tools=tools, skills=skills, conversation=messages,
+                 log_file=conversations.log_of(name))
 
 
 def list_conversations(current):
@@ -35,7 +38,7 @@ if __name__ == "__main__":                           # runs only when you start 
         tools.pop("load_skill", None)                # doesn't get it. (None: no error if it isn't there either)
 
     current = conversations.new_name()               # the name of the conversation you are in: a new one at every start
-    agent = new_agent()
+    agent = new_agent(current)
     print("model: " + MODEL + " | tools: " + (", ".join(tools) or "none")
           + " | skills: " + (", ".join(skills) or "none"))
     print("conversation: " + current + "   (/help for commands)")
@@ -51,7 +54,7 @@ if __name__ == "__main__":                           # runs only when you start 
 
             elif what == "new":
                 current = conversations.new_name()   # the one you leave is saved already (after every message)
-                agent = new_agent()
+                agent = new_agent(current)
                 print("new conversation: " + current)
 
             elif what == "list":
@@ -64,8 +67,9 @@ if __name__ == "__main__":                           # runs only when you start 
                 else:
                     data = conversations.load(name)
                     count = len(data["messages"])         # counted now: the agent adds its system prompt in front
-                    agent = new_agent(data["messages"])   # the saved messages + a fresh system prompt
+                    agent = new_agent(name, data["messages"])   # the saved messages + a fresh system prompt
                     agent.tokens = data.get("tokens", 0)  # its size as of its last answer
+                    agent.record("opened", messages=count)   # in the log: from here on, it went on after a break
                     current = name
                     print("opened " + name + ": " + str(count) + " messages")
 
@@ -76,7 +80,8 @@ if __name__ == "__main__":                           # runs only when you start 
                     print(problem)
                 else:
                     if old == current:               # you renamed the one you are in: it is saved under the
-                        current = new                # new name from now on
+                        current = new                # new name from now on, and its log is in the new folder
+                        agent.log_file = conversations.log_of(new)
                     print("renamed " + old + " -> " + new)
 
             elif what == "delete":
@@ -93,7 +98,7 @@ if __name__ == "__main__":                           # runs only when you start 
                         print("deleted " + name)
                         if name == current:          # you deleted the one you are in: start a new one, or the
                             current = conversations.new_name()   # next message would bring it back
-                            agent = new_agent()
+                            agent = new_agent(current)
                             print("new conversation: " + current)
 
             elif what == "message":
