@@ -7,7 +7,7 @@ Everything the agent can *do* is a tool, and every tool is one Python file in he
 | `calculate` | `basic/calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
 | `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
 | `read_result` | `results/read_result.py` | Shows **one** part of a saved result (see "Long results" below). Never more than one, so a huge result can't fill the context. |
-| `search_result` | `results/search_result.py` | Finds every line in a saved result that contains a text, like `grep`, with its part and line number. |
+| `search_result` | `results/search_result.py` | `grep` for one saved result: every matching line with its part and line number. With grep's options: regex, ignore case, whole word, invert, lines before/after, only the matched piece, count, max count. |
 
 ## How a tool file looks
 
@@ -102,7 +102,7 @@ Conversations/<name>/results/results-2.json     the next long result
 
 The model gets a preview instead: the result's name, its size, how many parts it has, and its first and last `RESULT_PREVIEW` characters (300). Then:
 
-- **`search_result`** glues the parts back together and finds the lines it needs, with their part and line number.
+- **`search_result`** glues the parts back together and searches them like `grep`, with their part and line number. It has grep's options as named settings: `regex` (-E), `ignore_case` (-i), `whole_word` (-w), `invert` (-v), `before` / `after` (-B / -A), `only_matching` (-o), `count` (-c), `max_count` (-m). It is written with Python's `re`, not the grep program, so it works the same on every system; regular expressions use Python's syntax, which is nearly the same as `grep -P`.
 - **`read_result`** shows one whole part. For more, the model asks for the next part.
 
 An answer from `search_result` that is too long is saved as a new result too. That is on purpose: the model can search that one again, narrower. Everything is counted in characters, not tokens, so it works the same with every model. The model can only reach its own conversation's results.
