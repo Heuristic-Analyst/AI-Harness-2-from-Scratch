@@ -5,6 +5,8 @@
 #                                                  never read by the program: it is for you (the agent writes it)
 #   Conversations/20261022-21-40-05/results/       tool results too long for the context: results-1.json, ...
 #                                                  (functions/results.py)
+#   Conversations/20261022-21-40-05/checkpoint.md  the model's notes on where it stands, written when the
+#                                                  conversation got too full (tools/basic/checkpoint.py)
 # a new conversation is only written once something was said in it, so there are no empty folders.
 
 import os
@@ -30,6 +32,9 @@ def log_of(name):
 
 def results_of(name):
     return os.path.join(CONVERSATIONS_DIR, name, "results")      # tool results too long for the context
+
+def checkpoint_of(name):
+    return os.path.join(CONVERSATIONS_DIR, name, "checkpoint.md")   # in the system prompt, once there is one
 
 def exists(name):
     return os.path.isdir(folder_of(name))
@@ -72,8 +77,8 @@ def save(name, agent):
     messages = agent.conversation
     if messages and messages[0]["role"] == "system":   # without the system prompt
         messages = messages[1:]
-    if not messages:                                    # nothing said yet: nothing to save, no empty folder
-        return
+    if not messages and not os.path.isfile(state_of(name)):   # nothing said yet: nothing to save, no empty folder.
+        return                                          # (emptied by a checkpoint: then state.json is emptied too)
     data = {"messages": messages, "tokens": agent.tokens}
     os.makedirs(folder_of(name), exist_ok=True)         # the folder appears with the first save
     temporary = state_of(name) + ".saving"
