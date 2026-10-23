@@ -29,35 +29,31 @@ class Agent:
         self.printing = None                   # what kind of text was printed last: "THINKING", "ANSWER" or None
         self.tokens = 0                        # how big the conversation is, in tokens, as of the last answer.
                                                # 0 = no answer yet. the next call sends this + the new message
-        self.log_file = log_file               # where everything that happens is written, one line each (log.jsonl).
-                                               # None = no log
+        self.log_file = log_file               # where every message is written, one line each (log.jsonl). None = no log
         self.logged_system = None              # the system prompt as it was last written into the log
         self.conversation = conversation or []
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
-    # --- the log: everything, one json line each, only ever added to, never changed. only for you to read ---
-    def record(self, kind, **fields):
-        """write one line into the log: when, what kind of thing happened, and its details.
-        e.g. record("opened", messages=12) -> {"time": "2026-10-22T22:15:03", "kind": "opened", "messages": 12}"""
+    # --- the log: every message, one json line each, only ever added to. only for you to read ---
+    def log(self, message):
+        """write one message into the log, at the end of the file. called right after a message arrived (your
+        question, the model's answer, a tool's result). before it, the system prompt, but only if it changed since
+        it was last logged: so the log shows which system prompt the messages after it were sent with.
+        the log never looks at the conversation list again: whatever happens to it later (a message taken back,
+        state.json deleted), what was said stays in the log"""
         if not self.log_file:                  # no log for this agent
             return
-        entry = {"time": datetime.datetime.now().isoformat(timespec="seconds"), "kind": kind}
-        entry.update(fields)                   # the details: message=..., reason=..., ...
+        now = datetime.datetime.now().isoformat(timespec="seconds")   # e.g. 2026-10-23T20:31:05
+        lines = []
+        system = self.conversation[0]["content"] if self.conversation and self.conversation[0]["role"] == "system" else ""
+        if system != self.logged_system:       # 1. the system prompt: new, or changed since it was last logged
+            lines.append({"time": now, "kind": "system", "content": system})
+            self.logged_system = system
+        lines.append({"time": now, "kind": "message", "message": message})   # 2. the message itself
         os.makedirs(os.path.dirname(self.log_file), exist_ok=True)   # the folder appears with the first line
         with open(self.log_file, "a", encoding="utf-8") as f:        # "a" = add at the end, never replace.
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")    # opened and closed for every line, so the
-                                                                     # file is never held open (a rename works)
-
-    def add(self, message):
-        """put a message into the conversation, and into the log. every message goes in through here.
-        the system prompt goes into the log first, but only if it changed since it was last written there:
-        so the log always shows which system prompt the following messages were sent with"""
-        system = self.conversation[0]["content"] if self.conversation and self.conversation[0]["role"] == "system" else ""
-        if system != self.logged_system:       # new, or changed since the last time: log it once
-            self.record("system", content=system)
-            self.logged_system = system
-        self.conversation.append(message)
-        self.record("message", message=message)
+            for line in lines:                                       # opened and closed every time, so the file is
+                f.write(json.dumps(line, ensure_ascii=False) + "\n") # never held open (a /rename works)
 
     def build_system(self):
         """put the system prompt together from its parts, always in the same order, and return it as text.
@@ -91,22 +87,24 @@ class Agent:
         model -> it asks for tools -> run them -> their results go back to the model -> model -> ...
         prints everything while it happens, and returns the final answer as text"""
         question = {"role": "user", "content": text}
-        self.add(question)
+        self.conversation.append(question)
+        self.log(question)
         try:
             while True:                            # one round = one model call (+ the tools it asked for)
                 response = self.call_model()
                 response = self.show(response)     # inside the try: when streaming, the connection can also fail
                                                    # here, in the middle of the answer. afterwards: the finished response
                 message = response.choices[0].message   # the answer: text, thinking, tool calls
-                self.add(message.model_dump(exclude_none=True))   # the WHOLE message as a dict
+                answer = message.model_dump(exclude_none=True)   # the WHOLE message as a dict
+                self.conversation.append(answer)
+                self.log(answer)
                 self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
                 if not message.tool_calls:         # CHECK: does the model want a tool?
                     return message.content or ""   #   no: that was the final answer. done
                 self.run_tools(message.tool_calls) #   yes: run them, put the results in, and loop: ask the model again
-        except Exception as e:
+        except Exception:
             if self.conversation[-1] is question:  # it failed before anything happened: take the question back,
                 self.conversation.pop()            # so the list is as before. (if tools already ran, their work stays)
-                self.record("question taken back", reason=type(e).__name__ + ": " + str(e))   # the log keeps it
             raise                                  # and let the caller know. main.py prints it
 
     # --- tools: every tool call of one answer runs in its own thread, all at the same time ---
@@ -126,10 +124,12 @@ class Agent:
         for call in tool_calls:                    # 3. in the order the model ASKED, not the order they finished
             result = results.get(call.id, "error: the tool gave no result")   # never missing: see run_tool
             print("TOOL RESULT: " + call.function.name + " -> " + result)
-            self.add({"role": "tool",
-                      "tool_call_id": call.id,   # which call this answers: must match exactly
-                      "name": call.function.name,
-                      "content": result})
+            tool_message = {"role": "tool",
+                            "tool_call_id": call.id,   # which call this answers: must match exactly
+                            "name": call.function.name,
+                            "content": result}
+            self.conversation.append(tool_message)
+            self.log(tool_message)
 
     def run_tool(self, call, results):
         """run ONE tool call (in its own thread) and put its result into results[call.id]. it never fails:
