@@ -5,6 +5,7 @@ import datetime
 import threading
 import litellm
 import logging
+from functions.results import shorten
 
 litellm.drop_params = True     # a model that can't do something we ask for (e.g. thinking): leave it out, don't crash
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)   # litellm is chatty: only show real errors, no warnings
@@ -16,7 +17,7 @@ RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
 
 class Agent:
     def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False,
-                 tools=None, skills=None, conversation=None, log_file=None):
+                 tools=None, skills=None, conversation=None, log_file=None, results_dir=None):
         self.model = model
         self.api_key = api_key
         self.instructions = instructions       # who the agent is (the soul): the first part of its system prompt
@@ -31,6 +32,8 @@ class Agent:
                                                # 0 = no answer yet. the next call sends this + the new message
         self.log_file = log_file               # where every message is written, one line each (log.jsonl). None = no log
         self.logged_system = None              # the system prompt as it was last written into the log
+        self.results_dir = results_dir         # where tool results too long for the context are saved, in parts
+                                               # (functions/results.py). None = never saved, always given whole
         self.conversation = conversation or []
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
@@ -123,6 +126,7 @@ class Agent:
             thread.join()                          #    that's why they write into a dict by id, not into a list
         for call in tool_calls:                    # 3. in the order the model ASKED, not the order they finished
             result = results.get(call.id, "error: the tool gave no result")   # never missing: see run_tool
+            result = shorten(self.results_dir, result)   # too long? saved into results/, the model gets a preview
             print("TOOL RESULT: " + call.function.name + " -> " + result)
             tool_message = {"role": "tool",
                             "tool_call_id": call.id,   # which call this answers: must match exactly
