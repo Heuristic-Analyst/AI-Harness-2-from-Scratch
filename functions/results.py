@@ -53,7 +53,8 @@ def next_number(folder):
 def preview(name, text, count):
     """what the model gets instead of a long result: where it is, how big, the start and the end"""
     return ("[this result is too long (" + format(len(text), ",") + " characters). it is saved as "
-            + name + ", in " + str(count) + " parts of up to " + format(RESULT_PART, ",") + " characters. "
+            + name + ", in " + str(count) + (" part" if count == 1 else " parts")
+            + " of up to " + format(RESULT_PART, ",") + " characters. "
             "read_result shows one part, search_result finds lines in it. its start and its end:]\n"
             + text[:RESULT_PREVIEW] + "\n[...]\n" + text[-RESULT_PREVIEW:])
 
