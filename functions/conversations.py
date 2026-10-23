@@ -3,6 +3,8 @@
 #                                                  replaced after every message
 #   Conversations/20261022-21-40-05/log.jsonl      every message ever said, one line each. only ever added to,
 #                                                  never read by the program: it is for you (the agent writes it)
+#   Conversations/20261022-21-40-05/results/       tool results too long for the context: results-1.json, ...
+#                                                  (functions/results.py)
 # a new conversation is only written once something was said in it, so there are no empty folders.
 
 import os
@@ -25,6 +27,9 @@ def state_of(name):
 
 def log_of(name):
     return os.path.join(CONVERSATIONS_DIR, name, "log.jsonl")
+
+def results_of(name):
+    return os.path.join(CONVERSATIONS_DIR, name, "results")      # tool results too long for the context
 
 def exists(name):
     return os.path.isdir(folder_of(name))
