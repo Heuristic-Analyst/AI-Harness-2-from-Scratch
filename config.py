@@ -20,6 +20,15 @@ EFFORT = MODEL_SETTINGS.get("Effort")                  # optional: how hard the 
                                                        # None = the model's own default
 PRINT_THINKING = MODEL_SETTINGS.get("PrintThinking", False)   # optional: True = show the thinking too, not only the answer
 
+# Long tool results (see functions/results.py). in characters, not tokens: the same for every model
+RESULT_LIMIT = 8_000       # x: a tool result longer than this is saved into the conversation's results/ folder,
+                           #    and the model only gets a short preview of it
+RESULT_PART = 4_000        # y: a saved result is cut into parts of this size. read_result shows one part at a time
+RESULT_PREVIEW = 300       # how many characters of the result's start, and of its end, are in the preview
+if RESULT_PART > RESULT_LIMIT - 500:                   # a part (+ read_result's first line) must stay below the limit,
+    raise SystemExit("config.py: RESULT_PART must be at least 500 smaller than RESULT_LIMIT")   # or reading a part
+                                                       # would be too long again, and be saved again
+
 # Provider name
 provider = MODEL.split("/")[0].upper()               # "deepseek/deepseek-flash" -> "DEEPSEEK"
 
