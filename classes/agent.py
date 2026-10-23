@@ -6,6 +6,8 @@ import threading
 import litellm
 import logging
 from functions.results import shorten
+from functions.read_text import read_text
+from config import CHECKPOINT_AT, EMERGENCY_AT
 
 litellm.drop_params = True     # a model that can't do something we ask for (e.g. thinking): leave it out, don't crash
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)   # litellm is chatty: only show real errors, no warnings
@@ -15,9 +17,41 @@ RETRIES = 3                    # tries after the first one, only for errors that
 RETRY_ON = (litellm.RateLimitError, litellm.Timeout, litellm.APIConnectionError,
             litellm.InternalServerError, litellm.ServiceUnavailableError)
 
+# what the program says to the model about checkpoints (see ask, and tools/basic/checkpoint.py).
+# "[from the program, not the user]": so the model doesn't think you wrote it
+CHECKPOINT_REQUEST = """[from the program, not the user] CHECKPOINT. Your context is getting full. Write your checkpoint
+now and give it to the checkpoint tool. It replaces your whole conversation: afterwards you only have your system
+prompt with this checkpoint in it, so put in everything you need to go on. It also replaces your previous checkpoint
+(in your system prompt, if there is one): carry over everything from it that is still true. Call only the checkpoint
+tool in this reply. Short bullets, facts not stories, exactly these sections:
+## Goal
+what the user wants, and what "done" means
+## Decisions
+what was decided, and why
+## Facts
+what was found out, each with where it comes from
+## Done
+what is finished, so it is not done twice
+## Failed
+what was tried and did not work, and why, so it is not tried again
+## Open
+what is left, and the very next step
+## Files
+the saved results that matter (results-1, ...: read_result shows them again), and any other files
+## Last exchange
+the user's last message and your last answer, in short"""
+
+EMERGENCY_NOTE = """
+You are in the MIDDLE of a task: say exactly where you are in it, and what you were about to do next."""
+
+GO_ON = """[from the program, not the user] Your conversation was emptied in the middle of the task, after your
+checkpoint. Your checkpoint (in your system prompt) says where you were: go on with the task from there. Long results
+you saw before are still saved: read_result and search_result show them."""
+
 class Agent:
     def __init__(self, model, api_key, instructions=None, stream=False, effort=None, print_thinking=False,
-                 tools=None, skills=None, conversation=None, log_file=None, results_dir=None):
+                 tools=None, skills=None, conversation=None, log_file=None, results_dir=None,
+                 checkpoint_file=None, context_limit=None):
         self.model = model
         self.api_key = api_key
         self.instructions = instructions       # who the agent is (the soul): the first part of its system prompt
@@ -34,6 +68,12 @@ class Agent:
         self.logged_system = None              # the system prompt as it was last written into the log
         self.results_dir = results_dir         # where tool results too long for the context are saved, in parts
                                                # (functions/results.py). None = never saved, always given whole
+        self.checkpoint_file = checkpoint_file # checkpoint.md: the model's notes on where it stands, in the system
+                                               # prompt. written by the checkpoint tool. None = no checkpoints
+        self.context_limit = context_limit     # tokens the conversation may have. None = no checkpoints are asked for
+        self.checkpoint_asked = None           # None, or why a checkpoint was asked for: "end" (a task ended above
+                                               # CHECKPOINT_AT) or "emergency" (above EMERGENCY_AT in a task)
+        self.cleared = False                   # True right after the checkpoint tool emptied the conversation
         self.conversation = conversation or []
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
 
@@ -68,6 +108,11 @@ class Agent:
                        "matches a skill, first call load_skill with its name, then follow what it returns.\nSkills:")
             for name, skill in self.skills.items():
                 system += "\n- " + name + ": " + skill["description"]
+        checkpoint = read_text(self.checkpoint_file) if self.checkpoint_file else ""   # "" if there is none yet
+        if checkpoint:                    # 3. its checkpoint, once it wrote one: where it stands
+            system += ("\n\nYour checkpoint: your own notes from earlier in this conversation, written before the "
+                       "conversation was emptied to make room. It is where you stand.\n<checkpoint>\n"
+                       + checkpoint + "\n</checkpoint>")
         return system.strip()             # strip: no skills and no soul -> "" -> no system message at all
 
     def refresh_system(self):
@@ -88,10 +133,14 @@ class Agent:
     def ask(self, text):
         """send a message, and loop until the model answers without asking for a tool:
         model -> it asks for tools -> run them -> their results go back to the model -> model -> ...
+        after every answer, the size is checked. too full: the model is asked for its checkpoint (see checkpoint).
         prints everything while it happens, and returns the final answer as text"""
         question = {"role": "user", "content": text}
         self.conversation.append(question)
         self.log(question)
+        final = ""                                 # the task's final answer, once there is one
+        tries = 0                                  # how often a checkpoint was asked for and NOT written yet: after
+                                                   # 2 ignored requests, the model isn't asked again in this task
         try:
             while True:                            # one round = one model call (+ the tools it asked for)
                 response = self.call_model()
@@ -102,13 +151,54 @@ class Agent:
                 self.conversation.append(answer)
                 self.log(answer)
                 self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
-                if not message.tool_calls:         # CHECK: does the model want a tool?
-                    return message.content or ""   #   no: that was the final answer. done
-                self.run_tools(message.tool_calls) #   yes: run them, put the results in, and loop: ask the model again
+
+                if message.tool_calls:             # it wants tools: run them. their results must come right after
+                    self.run_tools(message.tool_calls)   # its request, so this happens first, whatever comes next
+                    if self.cleared:               # it called checkpoint: the conversation is empty now
+                        self.cleared = False
+                        tries = 0                  # it did write one: a long task may need another one later
+                        why = self.checkpoint_asked
+                        self.checkpoint_asked = None
+                        if why == "end":           # the task was finished before the checkpoint: done
+                            return final
+                        self.tell_model(GO_ON)     # in the middle of a task: go on from the checkpoint
+                        continue
+                    if self.too_full(EMERGENCY_AT) and tries < 2:   # very full, in the middle of a task: the next
+                        tries += 1                                  # message is the request, not the next step
+                        self.ask_for_checkpoint("emergency")
+                    continue                       # ask the model again, with the tool results (and the request)
+
+                if not self.checkpoint_asked:      # no tools: a text answer. if it isn't a reply to a checkpoint
+                    final = message.content or ""  # request, it is the task's final answer
+                if self.too_full(CHECKPOINT_AT) and tries < 2:   # the task is done: checkpoint now, if full enough
+                    tries += 1
+                    self.ask_for_checkpoint("end")
+                    continue
+                self.checkpoint_asked = None       # (asked twice and it didn't: given up for this task)
+                return final
         except Exception:
             if self.conversation[-1] is question:  # it failed before anything happened: take the question back,
                 self.conversation.pop()            # so the list is as before. (if tools already ran, their work stays)
             raise                                  # and let the caller know. main.py prints it
+
+    # --- checkpoints: when the conversation gets too full, the model writes down where it stands (the tool does it) ---
+    def too_full(self, share):
+        """is the conversation above this share of the context limit? (no limit: never)"""
+        return bool(self.context_limit) and self.tokens >= share * self.context_limit
+
+    def ask_for_checkpoint(self, why):
+        """the next message to the model: write your checkpoint. why: "end" (the task is done) or "emergency" (in the
+        middle of a task: then it also has to say where it is in the task)"""
+        self.checkpoint_asked = why
+        print("\n[" + format(self.tokens, ",") + " of " + format(self.context_limit, ",") + " tokens used: asking for "
+              + ("an emergency " if why == "emergency" else "a ") + "checkpoint]")
+        self.tell_model(CHECKPOINT_REQUEST + (EMERGENCY_NOTE if why == "emergency" else ""))
+
+    def tell_model(self, text):
+        """a message from the program to the model (not from you): into the conversation and the log"""
+        message = {"role": "user", "content": text}
+        self.conversation.append(message)
+        self.log(message)
 
     # --- tools: every tool call of one answer runs in its own thread, all at the same time ---
     def run_tools(self, tool_calls):
@@ -132,8 +222,10 @@ class Agent:
                             "tool_call_id": call.id,   # which call this answers: must match exactly
                             "name": call.function.name,
                             "content": result}
-            self.conversation.append(tool_message)
             self.log(tool_message)
+            if not self.cleared:                   # the checkpoint tool emptied the conversation: the request this
+                self.conversation.append(tool_message)   # answers is gone with it, so the result can't go in
+                                                         # (a result without its request is rejected). it is logged
 
     def run_tool(self, call, results):
         """run ONE tool call (in its own thread) and put its result into results[call.id]. it never fails:
