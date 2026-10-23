@@ -37,7 +37,7 @@ if __name__ == "__main__":                           # runs only when you start 
     if not skills:                                   # no skills: load_skill could do nothing, so the model
         tools.pop("load_skill", None)                # doesn't get it. (None: no error if it isn't there either)
 
-    current = conversations.new_name()               # the name of the conversation you are in: a new one at every start
+    current = conversations.new_name()               # the name of the conversation (folder) you are in: a new one at every start
     agent = new_agent(current)
     print("model: " + MODEL + " | tools: " + (", ".join(tools) or "none")
           + " | skills: " + (", ".join(skills) or "none"))
