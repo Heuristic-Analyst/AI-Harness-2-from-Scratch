@@ -1,6 +1,6 @@
 # run it:  python main.py
 # then type your messages. /help shows the commands, /exit (or ctrl+c) leaves.
-# every conversation is saved in Conversations/<name>/state.json after every message, and everything that happens
+# every conversation is saved in Conversations/<name>/state.json after every message, and every message
 # is written into Conversations/<name>/log.jsonl (functions/conversations.py)
 
 from config import *
@@ -69,7 +69,6 @@ if __name__ == "__main__":                           # runs only when you start 
                     count = len(data["messages"])         # counted now: the agent adds its system prompt in front
                     agent = new_agent(name, data["messages"])   # the saved messages + a fresh system prompt
                     agent.tokens = data.get("tokens", 0)  # its size as of its last answer
-                    agent.record("opened", messages=count)   # in the log: from here on, it went on after a break
                     current = name
                     print("opened " + name + ": " + str(count) + " messages")
 
