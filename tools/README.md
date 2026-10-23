@@ -6,6 +6,8 @@ Everything the agent can *do* is a tool, and every tool is one Python file in he
 |---|---|---|
 | `calculate` | `basic/calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
 | `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
+| `read_result` | `results/read_result.py` | Shows **one** part of a saved result (see "Long results" below). Never more than one, so a huge result can't fill the context. |
+| `search_result` | `results/search_result.py` | Finds every line in a saved result that contains a text, like `grep`, with its part and line number. |
 
 ## How a tool file looks
 
@@ -88,6 +90,22 @@ An error never crashes the program, and every call always gets an answer. Whatev
 | your `run` raised an exception | `error: ZeroDivisionError: division by zero` |
 
 So inside `run` you don't need `try` for everything. But when you *expect* a problem, return a clear text yourself: it helps the model more than a raw error. Say what was wrong and what to do instead, e.g. `"invalid expression: only digits, spaces and + - * / ( ) . % are allowed"`.
+
+## Long results
+
+A tool result longer than `RESULT_LIMIT` characters (8,000, in `config.py`) is not given to the model whole. `functions/results.py` cuts it into parts of `RESULT_PART` characters (4,000) and saves it in the conversation's folder:
+
+```
+Conversations/<name>/results/results-1.json     {"1": "the first 4000 characters", "2": "the next 4000", ...}
+Conversations/<name>/results/results-2.json     the next long result
+```
+
+The model gets a preview instead: the result's name, its size, how many parts it has, and its first and last `RESULT_PREVIEW` characters (300). Then:
+
+- **`search_result`** glues the parts back together and finds the lines it needs, with their part and line number.
+- **`read_result`** shows one whole part. For more, the model asks for the next part.
+
+An answer from `search_result` that is too long is saved as a new result too. That is on purpose: the model can search that one again, narrower. Everything is counted in characters, not tokens, so it works the same with every model. The model can only reach its own conversation's results.
 
 ## Good to know
 
