@@ -13,12 +13,12 @@ from functions import conversations
 
 
 def new_agent(name, messages=None):
-    """a fresh agent for the conversation called name: it logs into that conversation's log.jsonl.
-    messages: a saved conversation to go on with (it gets a new system prompt)"""
+    """a fresh agent for the conversation called name: it logs into that conversation's log.jsonl, and saves long
+    tool results into its results/ folder. messages: a saved conversation to go on with (it gets a new system prompt)"""
     return Agent(MODEL, API_KEY, instructions=soul, stream=STREAM,      # by name: can never land
                  effort=EFFORT, print_thinking=PRINT_THINKING,        # in the wrong parameter
                  tools=tools, skills=skills, conversation=messages,
-                 log_file=conversations.log_of(name))
+                 log_file=conversations.log_of(name), results_dir=conversations.results_of(name))
 
 
 def list_conversations(current):
@@ -79,8 +79,9 @@ if __name__ == "__main__":                           # runs only when you start 
                     print(problem)
                 else:
                     if old == current:               # you renamed the one you are in: it is saved under the
-                        current = new                # new name from now on, and its log is in the new folder
+                        current = new                # new name from now on: its log and results are in the new folder
                         agent.log_file = conversations.log_of(new)
+                        agent.results_dir = conversations.results_of(new)
                     print("renamed " + old + " -> " + new)
 
             elif what == "delete":
