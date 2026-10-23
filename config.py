@@ -19,6 +19,15 @@ STREAM = MODEL_SETTINGS.get("Stream", False)           # optional: True = print 
 EFFORT = MODEL_SETTINGS.get("Effort")                  # optional: how hard the model thinks ("low", "medium", "high").
                                                        # None = the model's own default
 PRINT_THINKING = MODEL_SETTINGS.get("PrintThinking", False)   # optional: True = show the thinking too, not only the answer
+CONTEXT_LIMIT = MODEL_SETTINGS.get("ContextLimit", 500_000)   # optional: tokens a conversation may have at most. keep it
+                                                       # at or below your model's real limit. tokens, not characters:
+                                                       # the model's window is counted in tokens
+
+# Checkpoints (see tools/basic/checkpoint.py): when the conversation gets too full, the model writes down where it
+# stands, and the conversation starts fresh with that checkpoint in its system prompt
+CHECKPOINT_AT = 0.6        # a task ended above 60% of CONTEXT_LIMIT: the model writes its checkpoint
+EMERGENCY_AT = 0.8         # above 80% in the middle of a task: the checkpoint is written right away, and the task
+                           # goes on from it
 
 # Long tool results (see functions/results.py). in characters, not tokens: the same for every model
 RESULT_LIMIT = 8_000       # x: a tool result longer than this is saved into the conversation's results/ folder,
