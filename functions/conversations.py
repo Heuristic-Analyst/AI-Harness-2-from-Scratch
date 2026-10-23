@@ -1,7 +1,7 @@
 # conversations.py — the conversations on disk. each one is a folder in Conversations/, named after it:
 #   Conversations/20261022-21-40-05/state.json     what the agent carries right now: what /open loads again.
 #                                                  replaced after every message
-#   Conversations/20261022-21-40-05/log.jsonl      everything that ever happened, one line each. only ever added to,
+#   Conversations/20261022-21-40-05/log.jsonl      every message ever said, one line each. only ever added to,
 #                                                  never read by the program: it is for you (the agent writes it)
 # a new conversation is only written once something was said in it, so there are no empty folders.
 
