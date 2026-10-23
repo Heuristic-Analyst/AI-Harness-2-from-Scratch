@@ -19,7 +19,7 @@ STREAM = MODEL_SETTINGS.get("Stream", False)           # optional: True = print 
 EFFORT = MODEL_SETTINGS.get("Effort")                  # optional: how hard the model thinks ("low", "medium", "high").
                                                        # None = the model's own default
 PRINT_THINKING = MODEL_SETTINGS.get("PrintThinking", False)   # optional: True = show the thinking too, not only the answer
-CONTEXT_LIMIT = MODEL_SETTINGS.get("ContextLimit", 500_000)   # optional: tokens a conversation may have at most. keep it
+CONTEXT_LIMIT = MODEL_SETTINGS.get("ContextLimit", 100_000)   # optional: tokens a conversation may have at most. keep it
                                                        # at or below your model's real limit. tokens, not characters:
                                                        # the model's window is counted in tokens
 
