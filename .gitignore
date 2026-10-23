@@ -1,6 +1,9 @@
 # your API keys and your chats: never on GitHub
 .env
-Conversations/
+# everything in Conversations/, except its README. (git can't bring a file back from an ignored folder, so the
+# folder's contents are ignored instead of the folder itself)
+Conversations/*
+!Conversations/README.md
 
 # python's cache files
 __pycache__/
