@@ -26,7 +26,7 @@ A small AI assistant that runs in your terminal, built step by step so that ever
 - **Saving**: every conversation is a folder. `state.json` is what the model carries right now, written to a temporary file first and then swapped in. `log.jsonl` gets every message ever said, and the system prompt whenever it changed. It is only ever added to, and the program never reads it.
 - **Safety**:
   - `calculate` only accepts digits and math symbols, and runs in its own isolated Python process (`-I`) that is stopped after 5 seconds.
-  - Conversation and result names are checked against a pattern, so the model can never point the program at another folder.
+  - Conversation, result and time zone names are checked against a pattern, so the model can never point the program at another folder or file.
   - The API key is read from `.env`, but never put into the environment.
 
 ## Requirements
@@ -57,7 +57,7 @@ python main.py
 ```
 
 ```
-model: deepseek/deepseek-flash | tools: calculate, checkpoint, load_skill, read_result, search_result | skills: stepwise-calculation
+model: deepseek/deepseek-flash | tools: calculate, checkpoint, get_time, load_skill, read_result, search_result | skills: stepwise-calculation
 conversation: 20261024-01-10-05   (/help for commands)
 
 > what is 17% of 2340?
@@ -139,7 +139,7 @@ Who the assistant is: the start of its system prompt. You write it. If the file 
 ├── Ego/
 │   └── SOUL.md              # who the assistant is
 ├── tools/                   # one file per tool (tools/README.md explains how to write one)
-│   ├── basic/               #   calculate, load_skill, checkpoint
+│   ├── basic/               #   calculate, get_time, load_skill, checkpoint
 │   └── results/             #   read_result, search_result
 ├── skills/                  # one folder per skill (skills/README.md explains how to write one)
 │   └── stepwise-calculation/SKILL.md
