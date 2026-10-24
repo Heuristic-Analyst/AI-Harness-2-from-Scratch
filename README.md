@@ -14,6 +14,21 @@ A small AI assistant that runs in your terminal, built step by step so that ever
 - **Checkpoints.** When a conversation gets too full, the model writes down where it stands, and the conversation starts fresh from those notes.
 - **Retries.** A busy or unreachable provider is tried again, waiting longer each time.
 
+## How it fits together
+
+- **`main.py`**: the chat loop. It reads what you type, sends `/commands` to `functions/commands.py`, and gives every other message to `agent.ask(text)`. After every message, also a failed one, it saves the conversation to `state.json`.
+- **`classes/agent.py`**: the heart of the program. `ask()` is the loop: call the model, add its answer to the conversation, run the tools it asked for, and go again until it answers without tools. `call_model()` tries again on errors that may go away by themselves (3 times, after 1, 2 and 4 seconds). `show()` prints the answer while it streams in, then glues the pieces back into one finished answer.
+- **The system prompt**: built fresh from three parts, always in this order: `Ego/SOUL.md`, the skills menu, `checkpoint.md`. It is never saved in `state.json`. The same order always gives the same text, so the provider's prompt cache stays valid.
+- **Tools**: one file each in `tools/`, with `TOOL` (what the model sees) and `run(agent, **args)` (what the program does). They are found at the start, with no list to edit. All tool calls of one answer run at the same time, each in its own thread. Their results go back in the order the model asked, each with its call's id. Any problem comes back as a text starting with `error:`, so every call always gets an answer.
+- **Skills**: only the name and description of each `SKILL.md` are in the system prompt. When a task matches, the model calls `load_skill` and gets the whole text back as a tool result. No skills: no `load_skill` either.
+- **Long results**: a tool result longer than 8,000 characters is saved in 4,000-character parts as `results/results-<n>.json`. The model gets a preview with the start, the end and the number of parts. It reads one part with `read_result`, or finds lines with `search_result`, a grep with grep's options (`-E -i -w -v -A -B -o -c -m`). If a search answer is too long itself, it is saved as a new result.
+- **Checkpoints**: the conversation's size comes from the token count the provider sends with every answer. A task that ended above 60% of `ContextLimit` gets a checkpoint request. Above 80% in the middle of a task, an emergency request comes right after the tool results. The model writes its notes in fixed sections (Goal, Decisions, Facts, Done, Failed, Open, Files, Last exchange) and gives them to the `checkpoint` tool. The tool saves `checkpoint.md`, empties the conversation, and builds the system prompt again with the checkpoint in it. The tool refuses when nobody asked, and the program asks at most twice per task.
+- **Saving**: every conversation is a folder. `state.json` is what the model carries right now, written to a temporary file first and then swapped in. `log.jsonl` gets every message ever said, and the system prompt whenever it changed. It is only ever added to, and the program never reads it.
+- **Safety**:
+  - `calculate` only accepts digits and math symbols, and runs in its own isolated Python process (`-I`) that is stopped after 5 seconds.
+  - Conversation and result names are checked against a pattern, so the model can never point the program at another folder.
+  - The API key is read from `.env`, but never put into the environment.
+
 ## Requirements
 
 - Python 3.10 or newer
