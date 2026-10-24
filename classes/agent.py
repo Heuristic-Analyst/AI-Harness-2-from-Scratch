@@ -163,6 +163,10 @@ class Agent:
                             return final
                         self.tell_model(GO_ON)     # in the middle of a task: go on from the checkpoint
                         continue
+                    if not any(call.function.name == "checkpoint" for call in message.tool_calls):
+                        self.checkpoint_asked = None   # it went on with other tools: a request it had was ignored.
+                                                       # (it called checkpoint but it failed, e.g. empty: the request
+                                                       # stays, so it may call it again)
                     if self.too_full(EMERGENCY_AT) and tries < 2:   # very full, in the middle of a task: the next
                         tries += 1                                  # message is the request, not the next step
                         self.ask_for_checkpoint("emergency")
