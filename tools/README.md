@@ -5,6 +5,7 @@ Everything the agent can *do* is a tool, and every tool is one Python file in he
 | Tool | File | What it does |
 |---|---|---|
 | `calculate` | `basic/calculate.py` | Evaluates a math expression, e.g. `0.17 * 2340`. Only digits and math symbols, in its own process, stopped after 5 seconds. |
+| `get_time` | `basic/get_time.py` | The current date, time (with milliseconds) and weekday: the user's own, or of any time zone by its IANA name (`Europe/Berlin`). The model has no clock, so it asks this whenever "today" matters. |
 | `load_skill` | `basic/load_skill.py` | Returns the full instructions of a skill (`skills/<name>/SKILL.md`) by its name. Taken away from the model when there are no skills. |
 | `checkpoint` | `basic/checkpoint.py` | Saves the model's checkpoint as `checkpoint.md`, empties the conversation and puts the checkpoint into the system prompt. Only works when the program asked for it: when the conversation got too full (`CHECKPOINT_AT`, `EMERGENCY_AT` in `config.py`). The log and the saved results stay. |
 | `read_result` | `results/read_result.py` | Shows **one** part of a saved result (see "Long results" below). Never more than one, so a huge result can't fill the context. |
