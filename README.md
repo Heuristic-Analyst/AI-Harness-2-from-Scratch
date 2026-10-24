@@ -2,8 +2,6 @@
 
 A small AI assistant that runs in your terminal, built step by step so that every line is understood. It talks to any model through [LiteLLM](https://github.com/BerriAI/litellm), can use tools, loads skills when it needs them, saves every conversation, and keeps working when a conversation gets too long for the model.
 
-It follows the ideas of [AI-Harness](https://github.com/Heuristic-Analyst/AI-Harness), rebuilt from zero.
-
 ## Features
 
 - **Any model.** One line in `settings/model.json` picks it: DeepSeek, Anthropic, OpenAI, a local Ollama model, or anything else LiteLLM supports.
