@@ -76,6 +76,8 @@ class Agent:
         self.cleared = False                   # True right after the checkpoint tool emptied the conversation
         self.conversation = conversation or []
         self.refresh_system()  # always. no instructions = no system message (see refresh_system)
+        self.counted = len(self.conversation)  # how many messages self.tokens covers. the ones after it (tool results,
+                                               # your next message) are not counted yet: size() adds them
 
     # --- the log: every message, one json line each, only ever added to. only for you to read ---
     def log(self, message):
@@ -133,8 +135,8 @@ class Agent:
     def ask(self, text):
         """send a message, and loop until the model answers without asking for a tool:
         model -> it asks for tools -> run them -> their results go back to the model -> model -> ...
-        after every answer, the size is checked. too full: the model is asked for its checkpoint (see checkpoint).
-        prints everything while it happens, and returns the final answer as text"""
+        the size is checked before every model call, and after the final answer. too full: the model is asked for its
+        checkpoint (see checkpoint). prints everything while it happens, and returns the final answer as text"""
         question = {"role": "user", "content": text}
         self.conversation.append(question)
         self.log(question)
@@ -143,6 +145,10 @@ class Agent:
                                                    # 2 ignored requests, the model isn't asked again in this task
         try:
             while True:                            # one round = one model call (+ the tools it asked for)
+                if not self.checkpoint_asked and self.too_full(EMERGENCY_AT) and tries < 2:   # right before every
+                    tries += 1                     # call: too full to go on with the task? then the next message is
+                    self.ask_for_checkpoint("emergency")   # the request, not the next step. (no new request while
+                                                           # one is still open: the model is answering that one)
                 response = self.call_model()
                 response = self.show(response)     # inside the try: when streaming, the connection can also fail
                                                    # here, in the middle of the answer. afterwards: the finished response
@@ -151,11 +157,13 @@ class Agent:
                 self.conversation.append(answer)
                 self.log(answer)
                 self.tokens = self.count_tokens(response)   # the conversation grew: how big is it now?
+                self.counted = len(self.conversation)       # that count covers every message up to here
 
                 if message.tool_calls:             # it wants tools: run them. their results must come right after
                     self.run_tools(message.tool_calls)   # its request, so this happens first, whatever comes next
                     if self.cleared:               # it called checkpoint: the conversation is empty now
                         self.cleared = False
+                        self.counted = len(self.conversation)   # the checkpoint tool counted the new, short one
                         tries = 0                  # it did write one: a long task may need another one later
                         why = self.checkpoint_asked
                         self.checkpoint_asked = None
@@ -167,10 +175,8 @@ class Agent:
                         self.checkpoint_asked = None   # it went on with other tools: a request it had was ignored.
                                                        # (it called checkpoint but it failed, e.g. empty: the request
                                                        # stays, so it may call it again)
-                    if self.too_full(EMERGENCY_AT) and tries < 2:   # very full, in the middle of a task: the next
-                        tries += 1                                  # message is the request, not the next step
-                        self.ask_for_checkpoint("emergency")
-                    continue                       # ask the model again, with the tool results (and the request)
+                    continue                       # ask the model again, with the tool results. (too full now? the
+                                                   # check at the top of the loop asks for the checkpoint first)
 
                 if not self.checkpoint_asked:      # no tools: a text answer. if it isn't a reply to a checkpoint
                     final = message.content or ""  # request, it is the task's final answer
@@ -186,15 +192,23 @@ class Agent:
             raise                                  # and let the caller know. main.py prints it
 
     # --- checkpoints: when the conversation gets too full, the model writes down where it stands (the tool does it) ---
+    def size(self):
+        """how big the conversation is right now, in tokens. self.tokens is exact (the provider counted it), but only
+        up to the last answer. what came after it (tool results, your message, the program's) is estimated and added"""
+        since = self.conversation[self.counted:]   # the messages self.tokens doesn't cover yet
+        if not since:
+            return self.tokens
+        return self.tokens + litellm.token_counter(model=self.model, messages=since)
+
     def too_full(self, share):
         """is the conversation above this share of the context limit? (no limit: never)"""
-        return bool(self.context_limit) and self.tokens >= share * self.context_limit
+        return bool(self.context_limit) and self.size() >= share * self.context_limit
 
     def ask_for_checkpoint(self, why):
         """the next message to the model: write your checkpoint. why: "end" (the task is done) or "emergency" (in the
         middle of a task: then it also has to say where it is in the task)"""
         self.checkpoint_asked = why
-        print("\n[" + format(self.tokens, ",") + " of " + format(self.context_limit, ",") + " tokens used: asking for "
+        print("\n[" + format(self.size(), ",") + " of " + format(self.context_limit, ",") + " tokens used: asking for "
               + ("an emergency " if why == "emergency" else "a ") + "checkpoint]")
         self.tell_model(CHECKPOINT_REQUEST + (EMERGENCY_NOTE if why == "emergency" else ""))
 
